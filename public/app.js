@@ -19,6 +19,8 @@ const startOcrBtn = document.getElementById('startOcrBtn');
 
 const modelSelect = document.getElementById('modelSelect');
 const autoSummaryCheck = document.getElementById('autoSummaryCheck');
+const summaryModelSelect = document.getElementById('summaryModelSelect');
+const summaryModelWrapper = document.getElementById('summaryModelWrapper');
 
 const statusDot = document.getElementById('statusDot');
 const statusText = document.getElementById('statusText');
@@ -28,6 +30,17 @@ const progressStageTitle = document.getElementById('progressStageTitle');
 const progressStatusText = document.getElementById('progressStatusText');
 const progressPercentage = document.getElementById('progressPercentage');
 const progressBarFill = document.getElementById('progressBarFill');
+
+// Métricas DOM
+const metricsSection = document.getElementById('metricsSection');
+const metricTotalTokens = document.getElementById('metricTotalTokens');
+const metricPromptTokens = document.getElementById('metricPromptTokens');
+const metricEvalTokens = document.getElementById('metricEvalTokens');
+const metricTokensPerSec = document.getElementById('metricTokensPerSec');
+const metricTotalDuration = document.getElementById('metricTotalDuration');
+const metricDurationDetail = document.getElementById('metricDurationDetail');
+const metricPagesCount = document.getElementById('metricPagesCount');
+const metricAvgPerPage = document.getElementById('metricAvgPerPage');
 
 const resultsSection = document.getElementById('resultsSection');
 const summaryCard = document.getElementById('summaryCard');
@@ -48,6 +61,17 @@ const downloadMdBtn = document.getElementById('downloadMdBtn');
 const downloadTxtBtn = document.getElementById('downloadTxtBtn');
 const searchInput = document.getElementById('searchInput');
 
+// Ocultar/mostrar selector de modelo de resumen según checkbox
+if (autoSummaryCheck && summaryModelWrapper) {
+  autoSummaryCheck.addEventListener('change', () => {
+    if (autoSummaryCheck.checked) {
+      summaryModelWrapper.classList.remove('hidden');
+    } else {
+      summaryModelWrapper.classList.add('hidden');
+    }
+  });
+}
+
 async function checkOllamaStatus() {
   try {
     const res = await fetch('/api/status');
@@ -58,15 +82,26 @@ async function checkOllamaStatus() {
       statusText.className = 'text-emerald-300 font-medium';
 
       modelSelect.innerHTML = '';
+      summaryModelSelect.innerHTML = '<option value="">Mismo modelo OCR (Recomendado, rápido)</option>';
+
       data.models.forEach(model => {
-        const option = document.createElement('option');
-        option.value = model;
-        option.textContent = model;
+        // Selector OCR
+        const opt = document.createElement('option');
+        opt.value = model;
+        opt.textContent = model;
         if (model.includes('deepseek-ocr')) {
-          option.selected = true;
-          option.textContent += ' (DeepSeek OCR)';
+          opt.selected = true;
+          opt.textContent += ' (DeepSeek OCR)';
+        } else if (model.includes('ocr')) {
+          opt.textContent += ' (OCR)';
         }
-        modelSelect.appendChild(option);
+        modelSelect.appendChild(opt);
+
+        // Selector Resumen
+        const optSummary = document.createElement('option');
+        optSummary.value = model;
+        optSummary.textContent = model;
+        summaryModelSelect.appendChild(optSummary);
       });
     } else {
       statusDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
@@ -107,6 +142,7 @@ function clearFile() {
   fileSelectedView.classList.remove('flex');
   dropZonePrompt.classList.remove('hidden');
   startOcrBtn.disabled = true;
+  metricsSection.classList.add('hidden');
   refreshIcons();
 }
 
@@ -165,6 +201,7 @@ startOcrBtn.addEventListener('click', async () => {
 
   startOcrBtn.disabled = true;
   progressSection.classList.remove('hidden');
+  metricsSection.classList.add('hidden');
   resultsSection.classList.add('hidden');
   summaryCard.classList.add('hidden');
   progressBarFill.style.width = '0%';
@@ -179,16 +216,22 @@ startOcrBtn.addEventListener('click', async () => {
 
   const format = document.querySelector('input[name="ocrFormat"]:checked')?.value || 'markdown';
   const model = modelSelect.value || 'deepseek-ocr:latest';
+  const summaryModel = summaryModelSelect.value || model;
   const autoSummary = autoSummaryCheck.checked;
 
   const formData = new FormData();
   formData.append('file', selectedFile);
   formData.append('model', model);
+  formData.append('summaryModel', summaryModel);
   formData.append('format', format);
   formData.append('autoSummary', autoSummary);
 
   try {
     const response = await fetch('/api/ocr-stream', { method: 'POST', body: formData });
+    if (!response.ok) {
+      throw new Error(`Error en el servidor (${response.status}): ${response.statusText}`);
+    }
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
@@ -218,7 +261,7 @@ startOcrBtn.addEventListener('click', async () => {
       }
     }
   } catch (err) {
-    progressStageTitle.textContent = 'Error';
+    progressStageTitle.textContent = 'Error durante el proceso';
     progressStatusText.textContent = err.message;
     startOcrBtn.disabled = false;
   }
@@ -261,10 +304,36 @@ function handleSseEvent(eventType, data) {
       renderSummary(data.summary);
     }
 
+    if (data.metrics) {
+      renderMetrics(data.metrics, data.totalPages);
+    }
+
     resultsSection.classList.remove('hidden');
     startOcrBtn.disabled = false;
     refreshIcons();
+  } else if (eventType === 'error') {
+    progressStageTitle.textContent = 'Aviso';
+    progressStatusText.textContent = data.message;
+    startOcrBtn.disabled = false;
   }
+}
+
+// Renderizar métricas de rendimiento y tokens
+function renderMetrics(metrics, totalPages) {
+  metricTotalTokens.textContent = Number(metrics.totalTokens || 0).toLocaleString();
+  metricPromptTokens.textContent = Number(metrics.promptTokens || 0).toLocaleString();
+  metricEvalTokens.textContent = Number(metrics.evalTokens || 0).toLocaleString();
+
+  metricTokensPerSec.textContent = Number(metrics.tokensPerSecond || 0).toFixed(1);
+  metricTotalDuration.textContent = metrics.totalDurationSec || '0.00';
+  metricDurationDetail.textContent = `${metrics.totalDurationSec || '0.00'}s total (${metrics.evalDurationSec || '0.0'}s gen)`;
+
+  metricPagesCount.textContent = totalPages || 1;
+  const avgSec = totalPages > 0 ? (parseFloat(metrics.totalDurationSec || 0) / totalPages).toFixed(2) : '0.00';
+  metricAvgPerPage.textContent = `${avgSec}s / pág`;
+
+  metricsSection.classList.remove('hidden');
+  refreshIcons();
 }
 
 function renderSummary(summaryMd) {

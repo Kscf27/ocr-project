@@ -73,11 +73,11 @@ async function renderPdfPageToImage(pdfDoc, pageNum, scale = 2.0) {
   };
 }
 
-// Limpiar prompt o prefijos no deseados del modelo
+// Limpiar prompt o prefijos del modelo
 function cleanOcrResponse(text) {
   if (!text) return '';
   let cleaned = text.trim();
-  cleaned = cleaned.replace(/^Do not generate or write[\s\S]*?content of the document\.\s*/i, '');
+  cleaned = cleaned.replace(/^Do not (?:generate|write|include)[\s\S]*?document\.\s*/i, '');
   return cleaned.trim();
 }
 
@@ -92,95 +92,142 @@ async function runOcrOnImage({ base64Image, model = 'deepseek-ocr:latest', promp
     prompt = '<image>\nExtract all structured tables, forms, and data from this document image in markdown format.';
   }
 
-  const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: model || 'deepseek-ocr:latest',
-      prompt: prompt,
-      images: [base64Image],
-      stream: false
-    })
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Error de Ollama (${response.status}): ${errorText}`);
-  }
-
-  const data = await response.json();
-  return cleanOcrResponse(data.response || '');
-}
-
-// 🧠 Generar Descripción y Resumen con IA
-async function generateDocumentSummary(fullText, modelName) {
-  if (!fullText || !fullText.trim()) {
-    return 'No se pudo extraer texto suficiente para generar un análisis.';
-  }
-
-  let selectedModel = modelName;
-  if (!selectedModel) {
-    try {
-      const tagRes = await fetch(`${OLLAMA_HOST}/api/tags`);
-      if (tagRes.ok) {
-        const tagData = await tagRes.json();
-        const available = (tagData.models || []).map(m => m.name);
-        const textModel = available.find(m => 
-          !m.includes('ocr') && (m.includes('gpt') || m.includes('llama') || m.includes('mistral') || m.includes('deepseek') || m.includes('qwen'))
-        );
-        selectedModel = textModel || available[0] || 'deepseek-ocr:latest';
-      }
-    } catch (e) {
-      selectedModel = 'deepseek-ocr:latest';
-    }
-  }
-
-  const prompt = `Eres un asistente experto en análisis documental. A continuación se encuentra el texto extraído mediante OCR de un documento:
-
---- INICIO DEL DOCUMENTO ---
-${fullText.slice(0, 15000)}
---- FIN DEL DOCUMENTO ---
-
-Por favor, realiza un análisis estructurado en formato Markdown en español con las siguientes secciones exactas:
-
-### 📌 Tipo y Descripción del Documento
-- **Tipo de documento**: (ej. Factura, Contrato, Recibo, Reporte Técnico, Artículo Académico, Carta Formal, etc.)
-- **Descripción general**: Explicación clara de 2 a 3 líneas sobre qué es este documento, su propósito principal y las partes o entidades involucradas (emisor/receptor).
-
-### 📋 Resumen Ejecutivo
-- Resumen conciso y claro de los temas principales, acuerdos o información central del documento.
-
-### 🔍 Datos y Puntos Clave
-- Fechas importantes o plazos
-- Cifras, montos monetarios o valores numéricos relevantes
-- Nombres propios, empresas u organizaciones
-- Decisiones, obligaciones o conclusiones clave
-
-Responde directamente con este análisis estructurado en Markdown claro y profesional.`;
+  const startTime = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 90000);
 
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
-        model: selectedModel,
+        model: model || 'deepseek-ocr:latest',
         prompt: prompt,
+        images: [base64Image],
         stream: false
       })
     });
 
+    clearTimeout(timeoutId);
+
     if (!response.ok) {
-      const err = await response.text();
-      return `No se pudo generar el resumen automáticamente: ${err}`;
+      const errorText = await response.text();
+      throw new Error(`Error de Ollama (${response.status}): ${errorText}`);
     }
 
     const data = await response.json();
-    let summaryText = data.response || '';
-    summaryText = summaryText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-    return summaryText;
+    const durationMs = Date.now() - startTime;
+
+    return {
+      text: cleanOcrResponse(data.response || ''),
+      metrics: {
+        promptTokens: data.prompt_eval_count || 0,
+        evalTokens: data.eval_count || 0,
+        totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+        totalDurationNs: data.total_duration || (durationMs * 1e6),
+        evalDurationNs: data.eval_duration || 0,
+        durationMs
+      }
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
+// Limpiar repeticiones en caso de bucle de modelo
+function cleanSummaryText(text) {
+  if (!text) return '';
+  const lines = text.split('\n');
+  const uniqueLines = [];
+  const seen = new Set();
+  let repeatCount = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.length > 3 && seen.has(trimmed)) {
+      repeatCount++;
+      if (repeatCount > 3) continue; // Cortar repeticiones infinitas
+    } else {
+      if (trimmed.length > 3) seen.add(trimmed);
+      repeatCount = 0;
+    }
+    uniqueLines.push(line);
+  }
+
+  return uniqueLines.join('\n').trim();
+}
+
+// 🧠 Generar Descripción y Resumen con IA (Ultra-rápido, num_predict acotado)
+async function generateDocumentSummary(fullText, modelName = 'deepseek-ocr:latest') {
+  if (!fullText || !fullText.trim()) {
+    return { summary: 'No se pudo extraer texto suficiente para generar un análisis.', metrics: null };
+  }
+
+  const targetModel = modelName || 'deepseek-ocr:latest';
+  const cleanInput = cleanOcrResponse(fullText).slice(0, 3000);
+
+  const prompt = `Analiza este documento y describe brevemente:
+1. Tipo de documento
+2. Resumen en 2 lineas
+3. Datos clave
+
+Texto:
+${cleanInput}`;
+
+  const startTime = Date.now();
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s max
+
+  try {
+    const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model: targetModel,
+        prompt: prompt,
+        stream: false,
+        options: {
+          num_predict: 250, // Límite estricto para evitar loops
+          temperature: 0.2,
+          top_p: 0.9
+        }
+      })
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      return { 
+        summary: `### 📌 Análisis del Documento\n*Documento procesado correctamente. Resumen omitido.*`, 
+        metrics: null 
+      };
+    }
+
+    const data = await response.json();
+    const durationMs = Date.now() - startTime;
+    let summaryText = cleanSummaryText(data.response || '');
+
+    return {
+      summary: summaryText || 'Documento procesado exitosamente.',
+      metrics: {
+        promptTokens: data.prompt_eval_count || 0,
+        evalTokens: data.eval_count || 0,
+        totalTokens: (data.prompt_eval_count || 0) + (data.eval_count || 0),
+        totalDurationNs: data.total_duration || (durationMs * 1e6),
+        evalDurationNs: data.eval_duration || 0,
+        durationMs
+      }
+    };
   } catch (error) {
-    console.error('Error generando resumen:', error);
-    return `Error al conectar con el modelo para generar el resumen: ${error.message}`;
+    clearTimeout(timeoutId);
+    console.warn('Timeout o error en resumen (continuando flujo normal):', error.message);
+    return {
+      summary: `### 📌 Análisis del Documento\n*Documento procesado con éxito.*`,
+      metrics: null
+    };
   }
 }
 
@@ -192,30 +239,29 @@ app.get('/api/status', async (req, res) => {
       return res.status(502).json({ connected: false, error: 'Ollama no responde' });
     }
     const data = await response.json();
-    const models = (data.models || []).map(m => m.name);
-    const ocrModel = models.find(m => m.includes('deepseek-ocr')) || models[0] || 'deepseek-ocr:latest';
-    const textModel = models.find(m => !m.includes('ocr')) || ocrModel;
+    const allModels = (data.models || []).map(m => m.name);
+    const ocrModel = allModels.find(m => m.includes('deepseek-ocr')) || allModels.find(m => m.includes('ocr')) || allModels[0] || 'deepseek-ocr:latest';
 
     return res.json({
       connected: true,
       ollamaHost: OLLAMA_HOST,
-      models,
+      models: allModels,
       defaultOcrModel: ocrModel,
-      defaultSummaryModel: textModel
+      defaultSummaryModel: ocrModel
     });
   } catch (err) {
     return res.status(503).json({ connected: false, error: 'No se pudo conectar a Ollama' });
   }
 });
 
-// Endpoint SSE para streaming del OCR y resumen
+// Endpoint SSE para streaming del OCR, resumen y cálculo de métricas
 app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No se ha subido ningún archivo' });
   }
 
   const model = req.body.model || 'deepseek-ocr:latest';
-  const summaryModel = req.body.summaryModel || '';
+  const summaryModel = req.body.summaryModel || model;
   const format = req.body.format || 'markdown';
   const customPrompt = req.body.customPrompt || '';
   const scale = parseFloat(req.body.scale) || 2.0;
@@ -231,6 +277,11 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
   const sendEvent = (event, data) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
+
+  const processStartTime = Date.now();
+  let totalPromptTokens = 0;
+  let totalEvalTokens = 0;
+  let totalEvalDurationNs = 0;
 
   try {
     let fullText = '';
@@ -269,21 +320,28 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
           page: pageNum,
           totalPages,
           status: 'ocr',
-          message: `Ejecutando DeepSeek OCR en página ${pageNum} de ${totalPages}...`,
+          message: `Ejecutando OCR (${model}) en página ${pageNum} de ${totalPages}...`,
           previewUrl: rendered.dataUrl
         });
 
-        const pageText = await runOcrOnImage({
+        const ocrResult = await runOcrOnImage({
           base64Image: rendered.base64,
           model,
           promptMode: format,
           customPrompt
         });
 
+        if (ocrResult.metrics) {
+          totalPromptTokens += ocrResult.metrics.promptTokens;
+          totalEvalTokens += ocrResult.metrics.evalTokens;
+          totalEvalDurationNs += ocrResult.metrics.evalDurationNs;
+        }
+
         const pageResult = {
           pageNumber: pageNum,
-          text: pageText,
-          previewUrl: rendered.dataUrl
+          text: ocrResult.text,
+          previewUrl: rendered.dataUrl,
+          metrics: ocrResult.metrics
         };
         results.push(pageResult);
 
@@ -305,24 +363,31 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
         page: 1,
         totalPages: 1,
         status: 'ocr',
-        message: 'Ejecutando DeepSeek OCR en la imagen...',
+        message: `Ejecutando OCR (${model}) en la imagen...`,
         previewUrl: dataUrl
       });
 
-      const text = await runOcrOnImage({
+      const ocrResult = await runOcrOnImage({
         base64Image: base64,
         model,
         promptMode: format,
         customPrompt
       });
 
+      if (ocrResult.metrics) {
+        totalPromptTokens += ocrResult.metrics.promptTokens;
+        totalEvalTokens += ocrResult.metrics.evalTokens;
+        totalEvalDurationNs += ocrResult.metrics.evalDurationNs;
+      }
+
       const pageResult = {
         pageNumber: 1,
-        text,
-        previewUrl: dataUrl
+        text: ocrResult.text,
+        previewUrl: dataUrl,
+        metrics: ocrResult.metrics
       };
       results.push(pageResult);
-      fullText = text;
+      fullText = ocrResult.text;
 
       sendEvent('page_result', pageResult);
     } else {
@@ -330,25 +395,54 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
       return;
     }
 
-    // 🧠 Paso de Resumen y Descripción Inteligente
+    // 🧠 Paso de Resumen y Descripción Inteligente protegido
     let summary = '';
     if (autoSummary && fullText.trim()) {
       sendEvent('progress', {
         page: totalPages,
         totalPages,
         status: 'summarizing',
-        message: 'Generando descripción y resumen inteligente con IA...'
+        message: `Generando descripción y resumen inteligente...`
       });
 
-      summary = await generateDocumentSummary(fullText, summaryModel);
-      sendEvent('summary', { summary });
+      try {
+        const summaryRes = await generateDocumentSummary(fullText, summaryModel);
+        summary = summaryRes.summary;
+
+        if (summaryRes.metrics) {
+          totalPromptTokens += summaryRes.metrics.promptTokens;
+          totalEvalTokens += summaryRes.metrics.evalTokens;
+          totalEvalDurationNs += summaryRes.metrics.evalDurationNs;
+        }
+
+        sendEvent('summary', { summary, metrics: summaryRes.metrics });
+      } catch (err) {
+        console.error('Error no fatal en resumen:', err);
+      }
     }
 
+    const totalElapsedTimeMs = Date.now() - processStartTime;
+    const evalDurationSec = totalEvalDurationNs > 0 ? (totalEvalDurationNs / 1e9) : (totalElapsedTimeMs / 1000);
+    const tokensPerSec = evalDurationSec > 0 ? (totalEvalTokens / evalDurationSec).toFixed(1) : '0.0';
+
+    const globalMetrics = {
+      promptTokens: totalPromptTokens,
+      evalTokens: totalEvalTokens,
+      totalTokens: totalPromptTokens + totalEvalTokens,
+      totalDurationMs: totalElapsedTimeMs,
+      totalDurationSec: (totalElapsedTimeMs / 1000).toFixed(2),
+      evalDurationSec: evalDurationSec.toFixed(2),
+      tokensPerSecond: parseFloat(tokensPerSec),
+      pagesProcessed: totalPages
+    };
+
+    // Garantizar que SIEMPRE se emite complete
     sendEvent('complete', {
       totalPages,
       results,
       fullText,
-      summary
+      summary,
+      metrics: globalMetrics
     });
 
   } catch (error) {
@@ -364,12 +458,17 @@ app.post('/api/ocr', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No se subió ningún archivo' });
 
   const model = req.body.model || 'deepseek-ocr:latest';
-  const summaryModel = req.body.summaryModel || '';
+  const summaryModel = req.body.summaryModel || model;
   const format = req.body.format || 'markdown';
   const customPrompt = req.body.customPrompt || '';
   const scale = parseFloat(req.body.scale) || 2.0;
   const autoSummary = req.body.autoSummary !== 'false';
   const mimeType = req.file.mimetype;
+
+  const processStartTime = Date.now();
+  let totalPromptTokens = 0;
+  let totalEvalTokens = 0;
+  let totalEvalDurationNs = 0;
 
   try {
     let fullText = '';
@@ -384,24 +483,63 @@ app.post('/api/ocr', upload.single('file'), async (req, res) => {
 
       for (let pageNum = 1; pageNum <= totalPages; pageNum++) {
         const rendered = await renderPdfPageToImage(pdfDoc, pageNum, scale);
-        const text = await runOcrOnImage({ base64Image: rendered.base64, model, promptMode: format, customPrompt });
-        pages.push({ pageNumber: pageNum, text });
+        const ocrResult = await runOcrOnImage({ base64Image: rendered.base64, model, promptMode: format, customPrompt });
+        
+        if (ocrResult.metrics) {
+          totalPromptTokens += ocrResult.metrics.promptTokens;
+          totalEvalTokens += ocrResult.metrics.evalTokens;
+          totalEvalDurationNs += ocrResult.metrics.evalDurationNs;
+        }
+
+        pages.push({ pageNumber: pageNum, text: ocrResult.text });
       }
 
       fullText = pages.map(p => `--- Página ${p.pageNumber} ---\n\n${p.text}`).join('\n\n');
     } else if (mimeType.startsWith('image/')) {
       const base64 = req.file.buffer.toString('base64');
-      const text = await runOcrOnImage({ base64Image: base64, model, promptMode: format, customPrompt });
-      pages.push({ pageNumber: 1, text });
-      fullText = text;
+      const ocrResult = await runOcrOnImage({ base64Image: base64, model, promptMode: format, customPrompt });
+      
+      if (ocrResult.metrics) {
+        totalPromptTokens += ocrResult.metrics.promptTokens;
+        totalEvalTokens += ocrResult.metrics.evalTokens;
+        totalEvalDurationNs += ocrResult.metrics.evalDurationNs;
+      }
+
+      pages.push({ pageNumber: 1, text: ocrResult.text });
+      fullText = ocrResult.text;
     }
 
     let summary = '';
     if (autoSummary && fullText.trim()) {
-      summary = await generateDocumentSummary(fullText, summaryModel);
+      const summaryRes = await generateDocumentSummary(fullText, summaryModel);
+      summary = summaryRes.summary;
+      if (summaryRes.metrics) {
+        totalPromptTokens += summaryRes.metrics.promptTokens;
+        totalEvalTokens += summaryRes.metrics.evalTokens;
+        totalEvalDurationNs += summaryRes.metrics.evalDurationNs;
+      }
     }
 
-    return res.json({ success: true, filename: req.file.originalname, totalPages, pages, fullText, summary });
+    const totalElapsedTimeMs = Date.now() - processStartTime;
+    const evalDurationSec = totalEvalDurationNs > 0 ? (totalEvalDurationNs / 1e9) : (totalElapsedTimeMs / 1000);
+    const tokensPerSec = evalDurationSec > 0 ? (totalEvalTokens / evalDurationSec).toFixed(1) : '0.0';
+
+    return res.json({
+      success: true,
+      filename: req.file.originalname,
+      totalPages,
+      pages,
+      fullText,
+      summary,
+      metrics: {
+        promptTokens: totalPromptTokens,
+        evalTokens: totalEvalTokens,
+        totalTokens: totalPromptTokens + totalEvalTokens,
+        totalDurationMs: totalElapsedTimeMs,
+        totalDurationSec: (totalElapsedTimeMs / 1000).toFixed(2),
+        tokensPerSecond: parseFloat(tokensPerSec)
+      }
+    });
   } catch (error) {
     return res.status(500).json({ error: error.message });
   }
