@@ -1,0 +1,119 @@
+﻿/* Estilos complementarios para DeepSeek OCR Studio */
+
+/* Estilos para el texto Markdown renderizado */
+.prose {
+  color: #cbd5e1;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4 {
+  color: #f8fafc;
+  font-weight: 700;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose h1 { font-size: 1.6rem; border-bottom: 1px solid #334155; padding-bottom: 0.3em; }
+.prose h2 { font-size: 1.35rem; border-bottom: 1px solid #1e293b; padding-bottom: 0.2em; }
+.prose h3 { font-size: 1.15rem; }
+
+.prose p {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+}
+
+.prose ul, .prose ol {
+  padding-left: 1.5em;
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose ul { list-style-type: disc; }
+.prose ol { list-style-type: decimal; }
+
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1.2em;
+  margin-bottom: 1.2em;
+  font-size: 0.875rem;
+}
+
+.prose th, .prose td {
+  border: 1px solid #334155;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.prose th {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.prose tr:nth-child(even) {
+  background-color: #0f172a50;
+}
+
+.prose pre {
+  background-color: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 0.75rem;
+  padding: 1rem;
+  overflow-x: auto;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+}
+
+.prose code {
+  color: #38bdf8;
+  background-color: #1e293b80;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.85em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.prose pre code {
+  background-color: transparent;
+  padding: 0;
+  color: #e2e8f0;
+}
+
+.prose blockquote {
+  border-left: 4px solid #6366f1;
+  padding-left: 1rem;
+  margin-left: 0;
+  color: #94a3b8;
+  font-style: italic;
+}
+
+.prose hr {
+  border-color: #334155;
+  margin-top: 2rem;
+  margin-bottom: 2rem;
+}
+
+/* Transiciones de pestañas */
+.tab-btn.active {
+  background-color: #4f46e5;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+}
+
+/* Scrollbar personalizado */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #0f172a;
+}
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #475569;
+}

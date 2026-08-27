@@ -1,0 +1,13 @@
+﻿# Dependencias
+node_modules/
+.npm/
+
+# Archivos temporales
+*.tmp
+*.log
+.DS_Store
+Thumbs.db
+
+# Entorno
+.env
+.env.local

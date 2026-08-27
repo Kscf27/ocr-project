@@ -1,0 +1,242 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DeepSeek OCR - Extractor de Texto y Resumen con IA</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Marked.js -->
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <!-- DOMPurify -->
+  <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+  
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+          <i data-lucide="scan-text" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
+            DeepSeek OCR Studio
+          </h1>
+          <p class="text-xs text-slate-400">Extracción de texto, descripción y resumen inteligente con IA</p>
+        </div>
+      </div>
+
+      <div id="ollamaStatusBadge" class="flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-800/80 border border-slate-700 text-xs">
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-400 animate-pulse" id="statusDot"></span>
+        <span id="statusText" class="text-slate-300 font-medium">Verificando Ollama...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Contenedor Principal -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 flex flex-col gap-6">
+
+    <!-- Carga y Opciones -->
+    <section id="uploadSection" class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      
+      <!-- Dropzone -->
+      <div class="lg:col-span-2">
+        <div id="dropZone" class="relative group border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-2xl p-8 transition-all duration-200 bg-slate-800/30 hover:bg-slate-800/60 flex flex-col items-center justify-center text-center cursor-pointer min-h-[280px]">
+          <input type="file" id="fileInput" accept=".pdf,image/png,image/jpeg,image/webp" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+          
+          <div id="dropZonePrompt" class="flex flex-col items-center gap-3 pointer-events-none">
+            <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
+              <i data-lucide="file-up" class="w-8 h-8"></i>
+            </div>
+            <div class="space-y-1">
+              <p class="text-base font-semibold text-slate-200">
+                Arrastra tu PDF aquí o <span class="text-indigo-400 underline decoration-indigo-400/30 underline-offset-4">haz clic para buscar</span>
+              </p>
+              <p class="text-xs text-slate-400">PDF multi-página e imágenes hasta 100 MB</p>
+            </div>
+          </div>
+
+          <div id="fileSelectedView" class="hidden flex-col items-center gap-4 w-full max-w-md pointer-events-auto">
+            <div class="flex items-center gap-4 p-4 rounded-xl bg-slate-800 border border-slate-700 w-full">
+              <div class="w-12 h-12 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0">
+                <i data-lucide="file-text" class="w-6 h-6"></i>
+              </div>
+              <div class="flex-1 min-w-0 text-left">
+                <p id="selectedFileName" class="text-sm font-medium text-slate-200 truncate">documento.pdf</p>
+                <p id="selectedFileSize" class="text-xs text-slate-400">1.2 MB</p>
+              </div>
+              <button id="removeFileBtn" type="button" class="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-700/50 transition-colors" title="Quitar archivo">
+                <i data-lucide="x" class="w-5 h-5"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Opciones -->
+      <div class="bg-slate-800/50 border border-slate-800 rounded-2xl p-6 flex flex-col justify-between gap-4">
+        <div class="space-y-4">
+          <div class="flex items-center gap-2 pb-2 border-b border-slate-700/60">
+            <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i>
+            <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider">Opciones de OCR e IA</h2>
+          </div>
+
+          <!-- Modelo OCR -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1.5">Modelo OCR</label>
+            <select id="modelSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
+              <option value="deepseek-ocr:latest">deepseek-ocr:latest</option>
+            </select>
+          </div>
+
+          <!-- Checkbox Resumen Automático -->
+          <div class="p-3 bg-indigo-950/30 border border-indigo-500/20 rounded-xl">
+            <label class="flex items-center gap-2.5 cursor-pointer">
+              <input type="checkbox" id="autoSummaryCheck" checked class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 bg-slate-900 border-slate-700">
+              <div class="text-xs">
+                <span class="font-semibold text-indigo-300">Generar Descripción y Resumen con IA</span>
+                <p class="text-slate-400 text-[11px]">Analiza el tipo de documento, propósito y puntos clave</p>
+              </div>
+            </label>
+          </div>
+
+          <!-- Modo de Salida -->
+          <div>
+            <label class="block text-xs font-medium text-slate-300 mb-1.5">Formato de Extracción</label>
+            <div class="grid grid-cols-3 gap-2">
+              <label class="cursor-pointer">
+                <input type="radio" name="ocrFormat" value="markdown" checked class="peer sr-only">
+                <div class="p-2 rounded-lg bg-slate-900 border border-slate-700 text-center peer-checked:border-indigo-500 peer-checked:bg-indigo-600/10 peer-checked:text-indigo-300 text-xs text-slate-400 transition-all">
+                  Markdown
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="ocrFormat" value="text" class="peer sr-only">
+                <div class="p-2 rounded-lg bg-slate-900 border border-slate-700 text-center peer-checked:border-indigo-500 peer-checked:bg-indigo-600/10 peer-checked:text-indigo-300 text-xs text-slate-400 transition-all">
+                  Texto Plano
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="ocrFormat" value="table" class="peer sr-only">
+                <div class="p-2 rounded-lg bg-slate-900 border border-slate-700 text-center peer-checked:border-indigo-500 peer-checked:bg-indigo-600/10 peer-checked:text-indigo-300 text-xs text-slate-400 transition-all">
+                  Tablas
+                </div>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <button id="startOcrBtn" disabled class="w-full py-3 px-4 rounded-xl font-medium text-sm flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-600/25 transition-all">
+          <i data-lucide="sparkles" class="w-4 h-4"></i>
+          <span>Escanear y Analizar</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Progreso -->
+    <section id="progressSection" class="hidden bg-slate-800/40 border border-slate-800 rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-3">
+        <div class="flex items-center gap-3">
+          <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center animate-spin">
+            <i data-lucide="loader-2" class="w-5 h-5"></i>
+          </div>
+          <div>
+            <h3 id="progressStageTitle" class="text-sm font-semibold text-slate-200">Procesando...</h3>
+            <p id="progressStatusText" class="text-xs text-slate-400">Iniciando OCR...</p>
+          </div>
+        </div>
+        <span id="progressPercentage" class="text-sm font-bold text-indigo-400">0%</span>
+      </div>
+
+      <div class="w-full bg-slate-700/50 rounded-full h-2.5 overflow-hidden">
+        <div id="progressBarFill" class="bg-gradient-to-r from-indigo-500 to-cyan-400 h-2.5 rounded-full transition-all duration-300" style="width: 0%"></div>
+      </div>
+    </section>
+
+    <!-- Sección de Resultados -->
+    <section id="resultsSection" class="hidden flex flex-col gap-6">
+      
+      <!-- 🧠 Tarjeta de Descripción y Resumen con IA -->
+      <div id="summaryCard" class="hidden bg-gradient-to-br from-indigo-950/40 via-slate-800/60 to-slate-900/60 border border-indigo-500/30 rounded-2xl p-6 shadow-xl">
+        <div class="flex items-center justify-between pb-4 border-b border-indigo-500/20 mb-4">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+              <i data-lucide="brain-circuit" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-slate-100">Descripción y Resumen Inteligente</h3>
+              <p class="text-xs text-indigo-300/80">Generado automáticamente por el modelo de IA</p>
+            </div>
+          </div>
+          <button id="copySummaryBtn" class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-xs text-indigo-200 transition-all">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span>Copiar Análisis</span>
+          </button>
+        </div>
+
+        <div id="summaryContent" class="prose prose-invert prose-indigo text-xs sm:text-sm max-w-none"></div>
+      </div>
+
+      <!-- Barra de Herramientas de Resultados -->
+      <div class="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-slate-800/60 border border-slate-800">
+        <div class="flex items-center gap-1.5 p-1 bg-slate-900/80 rounded-xl border border-slate-700/60 text-xs">
+          <button id="tabFormattedBtn" class="tab-btn active px-3 py-1.5 rounded-lg font-medium transition-colors">
+            <i data-lucide="file-text" class="w-3.5 h-3.5 inline mr-1.5"></i>Texto Formateado
+          </button>
+          <button id="tabRawBtn" class="tab-btn px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200 transition-colors">
+            <i data-lucide="code" class="w-3.5 h-3.5 inline mr-1.5"></i>Texto Crudo
+          </button>
+          <button id="tabPagesBtn" class="tab-btn px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200 transition-colors">
+            <i data-lucide="layers" class="w-3.5 h-3.5 inline mr-1.5"></i>Por Páginas (<span id="tabPagesCount">0</span>)
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <div class="relative hidden sm:block">
+            <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+            <input type="text" id="searchInput" placeholder="Buscar texto..." class="bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-40">
+          </div>
+
+          <button id="copyBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-200 transition-colors">
+            <i data-lucide="copy" class="w-3.5 h-3.5"></i>
+            <span id="copyBtnText">Copiar Todo</span>
+          </button>
+
+          <button id="downloadMdBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/80 hover:bg-indigo-600 text-xs font-medium text-white transition-colors">
+            <i data-lucide="download" class="w-3.5 h-3.5"></i>
+            <span>Descargar .md</span>
+          </button>
+
+          <button id="downloadTxtBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-200 transition-colors">
+            <i data-lucide="file-down" class="w-3.5 h-3.5"></i>
+            <span>.txt</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Vistas -->
+      <div id="formattedViewContainer" class="result-view bg-slate-800/40 border border-slate-800 rounded-2xl p-8 min-h-[400px]">
+        <div id="formattedContent" class="prose prose-invert prose-indigo max-w-none"></div>
+      </div>
+
+      <div id="rawViewContainer" class="result-view hidden bg-slate-900 border border-slate-800 rounded-2xl p-4 min-h-[400px]">
+        <textarea id="rawTextarea" readonly class="w-full h-full min-h-[500px] bg-transparent text-slate-200 font-mono text-xs leading-relaxed focus:outline-none resize-y"></textarea>
+      </div>
+
+      <div id="pagesViewContainer" class="result-view hidden space-y-6"></div>
+    </section>
+
+  </main>
+
+  <footer class="border-t border-slate-800 bg-slate-900/50 py-4 text-center text-xs text-slate-500">
+    <p>Impulsado por Ollama y DeepSeek OCR en tu entorno local</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
