@@ -1,7 +1,7 @@
 @echo off
-title DeepSeek OCR Studio
+title Escaner de Incapacidades Medicas - IA Local
 echo ===================================================
-echo       Iniciando DeepSeek OCR Studio para PDF
+echo   Iniciando Escaner de Incapacidades Medicas (IA Local)
 echo ===================================================
 echo.
 

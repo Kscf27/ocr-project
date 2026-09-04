@@ -1,9 +1,9 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DeepSeek OCR - Extractor de Texto y Resumen con IA</title>
+  <title>Escáner de Incapacidades Médicas - IA Local</title>
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
   <!-- Marked.js -->
@@ -21,13 +21,13 @@
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center gap-3">
         <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-cyan-400 flex items-center justify-center shadow-lg shadow-indigo-500/20">
-          <i data-lucide="scan-text" class="w-6 h-6 text-white"></i>
+          <i data-lucide="clipboard-check" class="w-6 h-6 text-white"></i>
         </div>
         <div>
           <h1 class="text-lg font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">
-            DeepSeek OCR Studio
+            Escáner de Incapacidades IA
           </h1>
-          <p class="text-xs text-slate-400">Extracción de texto, descripción y métricas de tokens en tiempo real</p>
+          <p class="text-xs text-slate-400">Extracción de datos médicos, días de reposo y diagnóstico con IA local y privada</p>
         </div>
       </div>
 
@@ -51,23 +51,23 @@
           
           <div id="dropZonePrompt" class="flex flex-col items-center gap-3 pointer-events-none">
             <div class="w-16 h-16 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center group-hover:scale-110 transition-transform">
-              <i data-lucide="file-up" class="w-8 h-8"></i>
+              <i data-lucide="file-heart" class="w-8 h-8"></i>
             </div>
             <div class="space-y-1">
               <p class="text-base font-semibold text-slate-200">
-                Arrastra tu PDF aquí o <span class="text-indigo-400 underline decoration-indigo-400/30 underline-offset-4">haz clic para buscar</span>
+                Arrastra la incapacidad médica aquí o <span class="text-indigo-400 underline decoration-indigo-400/30 underline-offset-4">haz clic para buscar</span>
               </p>
-              <p class="text-xs text-slate-400">PDF multi-página e imágenes hasta 100 MB</p>
+              <p class="text-xs text-slate-400">PDFs de certificados o fotos/escaneos médicos (PNG, JPG, WebP) hasta 100 MB</p>
             </div>
           </div>
 
           <div id="fileSelectedView" class="hidden flex-col items-center gap-4 w-full max-w-md pointer-events-auto">
             <div class="flex items-center gap-4 p-4 rounded-xl bg-slate-800 border border-slate-700 w-full">
               <div class="w-12 h-12 rounded-lg bg-red-500/10 text-red-400 flex items-center justify-center flex-shrink-0">
-                <i data-lucide="file-text" class="w-6 h-6"></i>
+                <i data-lucide="file-heart" class="w-6 h-6"></i>
               </div>
               <div class="flex-1 min-w-0 text-left">
-                <p id="selectedFileName" class="text-sm font-medium text-slate-200 truncate">documento.pdf</p>
+                <p id="selectedFileName" class="text-sm font-medium text-slate-200 truncate">incapacidad_medica.pdf</p>
                 <p id="selectedFileSize" class="text-xs text-slate-400">1.2 MB</p>
               </div>
               <button id="removeFileBtn" type="button" class="p-2 text-slate-400 hover:text-red-400 rounded-lg hover:bg-slate-700/50 transition-colors" title="Quitar archivo">
@@ -83,12 +83,12 @@
         <div class="space-y-4">
           <div class="flex items-center gap-2 pb-2 border-b border-slate-700/60">
             <i data-lucide="sliders" class="w-4 h-4 text-indigo-400"></i>
-            <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider">Opciones de OCR e IA</h2>
+            <h2 class="text-sm font-semibold text-slate-200 uppercase tracking-wider">Opciones de Escaneo e IA</h2>
           </div>
 
           <!-- Modelo OCR -->
           <div>
-            <label class="block text-xs font-medium text-slate-300 mb-1.5">Modelo OCR</label>
+            <label class="block text-xs font-medium text-slate-300 mb-1.5">Modelo OCR / Visión</label>
             <select id="modelSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
               <option value="deepseek-ocr:latest">deepseek-ocr:latest</option>
             </select>
@@ -99,47 +99,22 @@
             <label class="flex items-center gap-2.5 cursor-pointer">
               <input type="checkbox" id="autoSummaryCheck" checked class="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 bg-slate-900 border-slate-700">
               <div class="text-xs">
-                <span class="font-semibold text-indigo-300">Descripción y Resumen con IA</span>
-                <p class="text-slate-400 text-[11px]">Genera tipo, emisor y puntos clave del documento</p>
+                <span class="font-semibold text-indigo-300">Auditoría y Resumen con IA</span>
+                <p class="text-slate-400 text-[11px]">Extrae paciente, EPS/IPS, fechas, días de reposo, CIE-10 y contingencia</p>
               </div>
             </label>
             <div id="summaryModelWrapper" class="pt-1 border-t border-indigo-500/20">
-              <label class="block text-[11px] font-medium text-slate-400 mb-1">Modelo para Resumen:</label>
+              <label class="block text-[11px] font-medium text-slate-400 mb-1">Modelo para Análisis Clínico:</label>
               <select id="summaryModelSelect" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-indigo-500">
                 <option value="">Mismo modelo OCR (Rápido, sin descarga)</option>
               </select>
             </div>
           </div>
-
-          <!-- Modo de Salida -->
-          <div>
-            <label class="block text-xs font-medium text-slate-300 mb-1.5">Formato de Extracción</label>
-            <div class="grid grid-cols-3 gap-2">
-              <label class="cursor-pointer">
-                <input type="radio" name="ocrFormat" value="markdown" checked class="peer sr-only">
-                <div class="p-2 rounded-lg bg-slate-900 border border-slate-700 text-center peer-checked:border-indigo-500 peer-checked:bg-indigo-600/10 peer-checked:text-indigo-300 text-xs text-slate-400 transition-all">
-                  Markdown
-                </div>
-              </label>
-              <label class="cursor-pointer">
-                <input type="radio" name="ocrFormat" value="text" class="peer sr-only">
-                <div class="p-2 rounded-lg bg-slate-900 border border-slate-700 text-center peer-checked:border-indigo-500 peer-checked:bg-indigo-600/10 peer-checked:text-indigo-300 text-xs text-slate-400 transition-all">
-                  Texto Plano
-                </div>
-              </label>
-              <label class="cursor-pointer">
-                <input type="radio" name="ocrFormat" value="table" class="peer sr-only">
-                <div class="p-2 rounded-lg bg-slate-900 border border-slate-700 text-center peer-checked:border-indigo-500 peer-checked:bg-indigo-600/10 peer-checked:text-indigo-300 text-xs text-slate-400 transition-all">
-                  Tablas
-                </div>
-              </label>
-            </div>
-          </div>
         </div>
 
-        <button id="startOcrBtn" disabled class="w-full py-3 px-4 rounded-xl font-medium text-sm flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-600/25 transition-all">
+        <button id="startOcrBtn" disabled class="w-full py-3 px-4 rounded-xl font-medium text-sm flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white shadow-lg shadow-indigo-600/25 transition-all mt-4">
           <i data-lucide="sparkles" class="w-4 h-4"></i>
-          <span>Escanear y Analizar</span>
+          <span>Escanear Incapacidad</span>
         </button>
       </div>
     </section>
@@ -256,16 +231,16 @@
         <div class="flex items-center justify-between pb-4 border-b border-indigo-500/20 mb-4">
           <div class="flex items-center gap-2.5">
             <div class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
-              <i data-lucide="brain-circuit" class="w-5 h-5"></i>
+              <i data-lucide="stethoscope" class="w-5 h-5"></i>
             </div>
             <div>
-              <h3 class="text-sm font-bold text-slate-100">Descripción y Resumen Inteligente</h3>
-              <p class="text-xs text-indigo-300/80">Generado automáticamente por el modelo de IA</p>
+              <h3 class="text-sm font-bold text-slate-100">Auditoría y Datos Clave de la Incapacidad</h3>
+              <p class="text-xs text-indigo-300/80">Extracción clínica y laboral procesada localmente por IA</p>
             </div>
           </div>
           <button id="copySummaryBtn" class="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/40 text-xs text-indigo-200 transition-all">
             <i data-lucide="copy" class="w-3.5 h-3.5"></i>
-            <span>Copiar Análisis</span>
+            <span>Copiar Datos Extraídos</span>
           </button>
         </div>
 
@@ -276,7 +251,7 @@
       <div class="flex flex-wrap items-center justify-between gap-4 p-4 rounded-2xl bg-slate-800/60 border border-slate-800">
         <div class="flex items-center gap-1.5 p-1 bg-slate-900/80 rounded-xl border border-slate-700/60 text-xs">
           <button id="tabFormattedBtn" class="tab-btn active px-3 py-1.5 rounded-lg font-medium transition-colors">
-            <i data-lucide="file-text" class="w-3.5 h-3.5 inline mr-1.5"></i>Texto Formateado
+            <i data-lucide="file-text" class="w-3.5 h-3.5 inline mr-1.5"></i>Markdown
           </button>
           <button id="tabRawBtn" class="tab-btn px-3 py-1.5 rounded-lg font-medium text-slate-400 hover:text-slate-200 transition-colors">
             <i data-lucide="code" class="w-3.5 h-3.5 inline mr-1.5"></i>Texto Crudo
@@ -289,7 +264,7 @@
         <div class="flex items-center gap-2">
           <div class="relative hidden sm:block">
             <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-            <input type="text" id="searchInput" placeholder="Buscar texto..." class="bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-40">
+            <input type="text" id="searchInput" placeholder="Buscar en texto médico..." class="bg-slate-900 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500 w-44">
           </div>
 
           <button id="copyBtn" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-200 transition-colors">
@@ -306,6 +281,11 @@
             <i data-lucide="file-down" class="w-3.5 h-3.5"></i>
             <span>.txt</span>
           </button>
+
+          <button id="downloadJsonBtnTop" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 border border-emerald-500/40 text-xs font-medium text-emerald-200 transition-colors">
+            <i data-lucide="braces" class="w-3.5 h-3.5"></i>
+            <span>.json</span>
+          </button>
         </div>
       </div>
 
@@ -319,12 +299,46 @@
       </div>
 
       <div id="pagesViewContainer" class="result-view hidden space-y-6"></div>
+
+      <!-- 📦 Datos Estructurados de la Incapacidad en Formato JSON (Abajo de las vistas) -->
+      <div id="disabilityJsonCard" class="hidden bg-slate-900/90 border border-slate-700/80 rounded-2xl p-6 shadow-xl space-y-4 animate-fade-in">
+        <div class="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-800">
+          <div class="flex items-center gap-3">
+            <div class="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shadow-inner">
+              <i data-lucide="braces" class="w-5 h-5"></i>
+            </div>
+            <div>
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-bold text-slate-100">Información de Incapacidad en Formato JSON</h3>
+                <span class="px-2 py-0.5 text-[10px] font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded-full">
+                  Campos faltantes en null
+                </span>
+              </div>
+              <p class="text-xs text-slate-400">Datos normalizados de auditoría médica para integración directa con bases de datos o sistemas de RRHH</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button id="copyJsonBtn" type="button" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-medium text-slate-200 transition-all hover:border-slate-600 active:scale-95">
+              <i data-lucide="copy" class="w-3.5 h-3.5 text-slate-400"></i>
+              <span id="copyJsonBtnText">Copiar JSON</span>
+            </button>
+            <button id="downloadJsonBtn" type="button" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/80 hover:bg-emerald-600 border border-emerald-500/50 text-xs font-medium text-white transition-all active:scale-95 shadow-lg shadow-emerald-600/20">
+              <i data-lucide="download" class="w-3.5 h-3.5"></i>
+              <span>Descargar .json</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="relative group">
+          <pre id="jsonContent" class="bg-slate-950 p-4 rounded-xl text-xs font-mono text-emerald-300/95 overflow-x-auto max-h-[500px] border border-slate-800/80 leading-relaxed select-all"></pre>
+        </div>
+      </div>
     </section>
 
   </main>
 
   <footer class="border-t border-slate-800 bg-slate-900/50 py-4 text-center text-xs text-slate-500">
-    <p>Impulsado por Ollama y DeepSeek OCR en tu entorno local</p>
+    <p>Procesamiento de incapacidades 100% privado y confidencial impulsado por IA local (Ollama) &bull; Sin envío de datos médicos a servidores externos</p>
   </footer>
 
   <script src="app.js"></script>

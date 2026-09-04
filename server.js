@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import multer from 'multer';
 import cors from 'cors';
 import path from 'path';
@@ -73,7 +73,7 @@ async function renderPdfPageToImage(pdfDoc, pageNum, scale = 2.0) {
   };
 }
 
-// Limpiar prompt o prefijos del modelo
+// Limpiar prefijos del modelo
 function cleanOcrResponse(text) {
   if (!text) return '';
   let cleaned = text.trim();
@@ -83,13 +83,13 @@ function cleanOcrResponse(text) {
 
 // Ejecutar OCR con Ollama
 async function runOcrOnImage({ base64Image, model = 'deepseek-ocr:latest', promptMode = 'markdown', customPrompt }) {
-  let prompt = '<image>\nConvert the image to markdown text. Output only the extracted document text.';
+  let prompt = '<image>\nConvert the image of this medical disability / sick leave certificate to markdown text. Output only the extracted document text.';
   if (customPrompt && customPrompt.trim()) {
     prompt = `<image>\n${customPrompt.trim()}`;
   } else if (promptMode === 'text') {
-    prompt = '<image>\nExtract all readable text from this document image in plain text format without markdown markup.';
+    prompt = '<image>\nExtract all readable text from this medical certificate image in plain text format without markdown markup.';
   } else if (promptMode === 'table') {
-    prompt = '<image>\nExtract all structured tables, forms, and data from this document image in markdown format.';
+    prompt = '<image>\nExtract all structured tables, forms, and clinical data from this medical certificate image in markdown format.';
   }
 
   const startTime = Date.now();
@@ -105,7 +105,8 @@ async function runOcrOnImage({ base64Image, model = 'deepseek-ocr:latest', promp
         model: model || 'deepseek-ocr:latest',
         prompt: prompt,
         images: [base64Image],
-        stream: false
+        stream: false,
+        think: false // Evita que modelos de visión con thinking devuelvan respuesta vacía
       })
     });
 
@@ -118,9 +119,10 @@ async function runOcrOnImage({ base64Image, model = 'deepseek-ocr:latest', promp
 
     const data = await response.json();
     const durationMs = Date.now() - startTime;
+    let ocrText = (data.response || data.message?.content || data.thinking || '').trim();
 
     return {
-      text: cleanOcrResponse(data.response || ''),
+      text: cleanOcrResponse(ocrText),
       metrics: {
         promptTokens: data.prompt_eval_count || 0,
         evalTokens: data.eval_count || 0,
@@ -136,49 +138,103 @@ async function runOcrOnImage({ base64Image, model = 'deepseek-ocr:latest', promp
   }
 }
 
-// Limpiar repeticiones en caso de bucle de modelo
-function cleanSummaryText(text) {
-  if (!text) return '';
-  const lines = text.split('\n');
-  const uniqueLines = [];
-  const seen = new Set();
-  let repeatCount = 0;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (trimmed.length > 3 && seen.has(trimmed)) {
-      repeatCount++;
-      if (repeatCount > 3) continue; // Cortar repeticiones infinitas
-    } else {
-      if (trimmed.length > 3) seen.add(trimmed);
-      repeatCount = 0;
-    }
-    uniqueLines.push(line);
-  }
-
-  return uniqueLines.join('\n').trim();
+// 📋 Esquema canónico conciso para datos estructurados de incapacidad médica (campos nulos si no existen)
+function getDefaultDisabilitySchema() {
+  return {
+    paciente: null,
+    identificacion: null,
+    entidad_salud: null,
+    medico: null,
+    dias_incapacidad: null,
+    fecha_inicio: null,
+    fecha_fin: null,
+    codigo_cie10: null,
+    diagnostico: null,
+    tipo_contingencia: null,
+    observaciones: null
+  };
 }
 
-// 🧠 Generar Descripción y Resumen con IA (Ultra-rápido, num_predict acotado)
-async function generateDocumentSummary(fullText, modelName = 'deepseek-ocr:latest') {
+// Normaliza el objeto JSON asegurando que todo campo ausente quede estrictamente en null
+function normalizeDisabilityData(raw) {
+  const defaults = getDefaultDisabilitySchema();
+  if (!raw || typeof raw !== 'object') return defaults;
+
+  const normalizeVal = (val) => {
+    if (val === undefined || val === null || val === '') return null;
+    if (typeof val === 'string') {
+      const trimmed = val.trim();
+      const lower = trimmed.toLowerCase();
+      if (['null', 'undefined', 'no especificado', 'no disponible', 'no reporta', 'n/a', 'desconocido', 'ninguno', 'none'].includes(lower)) {
+        return null;
+      }
+      return trimmed;
+    }
+    return val;
+  };
+
+  const result = {};
+  for (const key of Object.keys(defaults)) {
+    const val = raw[key];
+    if (key === 'dias_incapacidad' && val !== null && val !== undefined) {
+      const num = parseInt(String(val).replace(/[^0-9]/g, ''), 10);
+      result[key] = !isNaN(num) ? num : normalizeVal(val);
+    } else {
+      result[key] = normalizeVal(val);
+    }
+  }
+  return result;
+}
+
+// Generar Markdown de auditoría a partir de los datos estructurados en caso de fallback
+function generateMarkdownFromDisabilityData(data) {
+  return `### 🏥 Resumen de Incapacidad Médica
+- **Paciente**: ${data.paciente || 'No especificado'}
+- **Identificación**: ${data.identificacion || 'No especificado'}
+- **Entidad de Salud**: ${data.entidad_salud || 'No especificada'}
+- **Médico Tratante**: ${data.medico || 'No especificado'}
+- **Días Otorgados**: ${data.dias_incapacidad !== null ? `${data.dias_incapacidad} día(s)` : 'No especificado'}
+- **Período**: ${data.fecha_inicio || 'No especificada'} al ${data.fecha_fin || 'No especificada'}
+- **Diagnóstico (CIE-10)**: ${data.codigo_cie10 ? `[${data.codigo_cie10}] ` : ''}${data.diagnostico || 'No especificado'}
+- **Contingencia**: ${data.tipo_contingencia || 'Enfermedad General'}
+- **Observaciones**: ${data.observaciones || 'Sin observaciones adicionales registradas.'}`;
+}
+
+// 🩺 Generar Auditoría y Resumen Clínico de Incapacidad con IA
+async function generateDocumentSummary(fullText, modelName = 'gemma4:e4b') {
   if (!fullText || !fullText.trim()) {
-    return { summary: 'No se pudo extraer texto suficiente para generar un análisis.', metrics: null };
+    return {
+      summary: 'No se pudo extraer texto suficiente del certificado para generar un análisis.',
+      jsonData: getDefaultDisabilitySchema(),
+      metrics: null
+    };
   }
 
-  const targetModel = modelName || 'deepseek-ocr:latest';
-  const cleanInput = cleanOcrResponse(fullText).slice(0, 3000);
+  const targetModel = modelName || 'gemma4:e4b';
+  const cleanInput = cleanOcrResponse(fullText).slice(0, 8000);
+  const sampleSchema = getDefaultDisabilitySchema();
 
-  const prompt = `Analiza este documento y describe brevemente:
-1. Tipo de documento
-2. Resumen en 2 lineas
-3. Datos clave
+  const prompt = `Eres un asistente experto en auditoría médica y talento humano.
+A continuación se encuentra el texto extraído mediante OCR de un certificado de incapacidad médica:
 
-Texto:
-${cleanInput}`;
+--- DOCUMENTO DE INCAPACIDAD ---
+${cleanInput}
+--- FIN DOCUMENTO ---
+
+Instrucciones:
+1. Extrae los datos clínicos y laborales esenciales de la incapacidad.
+2. Si algún dato NO aparece en el texto, su valor DEBE ser estrictamente null.
+3. Devuelve ÚNICAMENTE un objeto JSON válido con estas dos claves:
+{
+  "resumen_markdown": "Resumen conciso en Markdown (con emojis) con los datos clave: Paciente, Entidad, Días, Fechas, CIE-10 y Observaciones.",
+  "datos_incapacidad": ${JSON.stringify(sampleSchema, null, 2)}
+}
+
+Responde exclusivamente con el JSON válido.`;
 
   const startTime = Date.now();
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s max
+  const timeoutId = setTimeout(() => controller.abort(), 90000);
 
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/generate`, {
@@ -189,10 +245,11 @@ ${cleanInput}`;
         model: targetModel,
         prompt: prompt,
         stream: false,
+        format: 'json',
+        think: false, // Evita que modelos como gemma4 consuman tokens en el canal oculto de pensamiento
         options: {
-          num_predict: 250, // Límite estricto para evitar loops
-          temperature: 0.2,
-          top_p: 0.9
+          temperature: 0.1,
+          num_predict: 2500
         }
       })
     });
@@ -200,18 +257,63 @@ ${cleanInput}`;
     clearTimeout(timeoutId);
 
     if (!response.ok) {
+      const err = await response.text();
       return { 
-        summary: `### 📌 Análisis del Documento\n*Documento procesado correctamente. Resumen omitido.*`, 
+        summary: `### 🏥 Auditoría de Incapacidad\n*No se pudo generar el análisis con el modelo '${targetModel}' (${response.status}): ${err}*`,
+        jsonData: getDefaultDisabilitySchema(),
         metrics: null 
       };
     }
 
     const data = await response.json();
     const durationMs = Date.now() - startTime;
-    let summaryText = cleanSummaryText(data.response || '');
+
+    // Obtener texto generado (manejando response, thinking o message.content según versión de Ollama)
+    let rawText = (data.response || data.message?.content || data.thinking || '').trim();
+    rawText = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
+
+    let parsedJson = null;
+    let summaryMarkdown = '';
+    let normalizedData = getDefaultDisabilitySchema();
+
+    if (rawText) {
+      // Intentar parsear JSON directo
+      try {
+        parsedJson = JSON.parse(rawText);
+      } catch (e) {
+        // Intentar extraer bloque JSON si vino envuelto en ```json ... ```
+        const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          try {
+            parsedJson = JSON.parse(jsonMatch[0]);
+          } catch (e2) {
+            console.warn('No se pudo parsear bloque JSON extraído:', e2.message);
+          }
+        }
+      }
+    }
+
+    if (parsedJson) {
+      if (parsedJson.datos_incapacidad) {
+        normalizedData = normalizeDisabilityData(parsedJson.datos_incapacidad);
+      } else if (parsedJson.paciente || parsedJson.tipo_documento || parsedJson.incapacidad) {
+        normalizedData = normalizeDisabilityData(parsedJson);
+      }
+
+      if (parsedJson.resumen_markdown && typeof parsedJson.resumen_markdown === 'string' && parsedJson.resumen_markdown.trim().length > 30) {
+        summaryMarkdown = parsedJson.resumen_markdown.trim();
+      } else {
+        summaryMarkdown = generateMarkdownFromDisabilityData(normalizedData);
+      }
+    } else {
+      // Si el modelo devolvió texto plano o markdown
+      summaryMarkdown = rawText || 'Análisis de incapacidad completado.';
+      normalizedData = getDefaultDisabilitySchema();
+    }
 
     return {
-      summary: summaryText || 'Documento procesado exitosamente.',
+      summary: summaryMarkdown,
+      jsonData: normalizedData,
       metrics: {
         promptTokens: data.prompt_eval_count || 0,
         evalTokens: data.eval_count || 0,
@@ -223,15 +325,17 @@ ${cleanInput}`;
     };
   } catch (error) {
     clearTimeout(timeoutId);
-    console.warn('Timeout o error en resumen (continuando flujo normal):', error.message);
+    console.error('Error en generación de resumen de incapacidad:', error);
+    const isTimeout = error.name === 'AbortError';
     return {
-      summary: `### 📌 Análisis del Documento\n*Documento procesado con éxito.*`,
+      summary: `### 🏥 Auditoría de Incapacidad\n${isTimeout ? `*El modelo '${targetModel}' tardó más de 90 segundos en responder.*` : `*Error con el modelo '${targetModel}': ${error.message}*`}`,
+      jsonData: getDefaultDisabilitySchema(),
       metrics: null
     };
   }
 }
 
-// Endpoint de estado y modelos
+// Endpoint de estado y modelos clasificados
 app.get('/api/status', async (req, res) => {
   try {
     const response = await fetch(`${OLLAMA_HOST}/api/tags`);
@@ -239,29 +343,41 @@ app.get('/api/status', async (req, res) => {
       return res.status(502).json({ connected: false, error: 'Ollama no responde' });
     }
     const data = await response.json();
-    const allModels = (data.models || []).map(m => m.name);
-    const ocrModel = allModels.find(m => m.includes('deepseek-ocr')) || allModels.find(m => m.includes('ocr')) || allModels[0] || 'deepseek-ocr:latest';
+    const allModels = data.models || [];
+    
+    // Modelos con capacidad de visión para OCR
+    const visionModels = allModels.filter(m => {
+      const name = m.name.toLowerCase();
+      const caps = m.capabilities || [];
+      return caps.includes('vision') || name.includes('ocr');
+    }).map(m => m.name);
+
+    const summaryModels = allModels.map(m => m.name);
+
+    const defaultOcr = visionModels.find(m => m.includes('deepseek-ocr')) || visionModels[0] || 'deepseek-ocr:latest';
+    const defaultSummary = summaryModels.find(m => m.includes('gemma4:e4b')) || summaryModels.find(m => m.includes('gemma') || m.includes('llama')) || defaultOcr;
 
     return res.json({
       connected: true,
       ollamaHost: OLLAMA_HOST,
-      models: allModels,
-      defaultOcrModel: ocrModel,
-      defaultSummaryModel: ocrModel
+      visionModels: visionModels.length > 0 ? visionModels : ['deepseek-ocr:latest', 'glm-ocr:latest'],
+      summaryModels,
+      defaultOcrModel: defaultOcr,
+      defaultSummaryModel: defaultSummary
     });
   } catch (err) {
     return res.status(503).json({ connected: false, error: 'No se pudo conectar a Ollama' });
   }
 });
 
-// Endpoint SSE para streaming del OCR, resumen y cálculo de métricas
+// Endpoint SSE para streaming del OCR y resumen
 app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
   if (!req.file) {
     return res.status(400).json({ error: 'No se ha subido ningún archivo' });
   }
 
   const model = req.body.model || 'deepseek-ocr:latest';
-  const summaryModel = req.body.summaryModel || model;
+  const summaryModel = req.body.summaryModel || 'gemma4:e4b';
   const format = req.body.format || 'markdown';
   const customPrompt = req.body.customPrompt || '';
   const scale = parseFloat(req.body.scale) || 2.0;
@@ -289,7 +405,7 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
     let totalPages = 1;
 
     if (mimeType === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf')) {
-      sendEvent('status', { message: 'Cargando y analizando PDF...', stage: 'loading' });
+      sendEvent('status', { message: 'Cargando y analizando certificado de incapacidad en PDF...', stage: 'loading' });
       
       const uint8Array = new Uint8Array(req.file.buffer);
       const loadingTask = pdfjsLib.getDocument({
@@ -320,7 +436,7 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
           page: pageNum,
           totalPages,
           status: 'ocr',
-          message: `Ejecutando OCR (${model}) en página ${pageNum} de ${totalPages}...`,
+          message: `Escaneando texto médico (${model}) en página ${pageNum} de ${totalPages}...`,
           previewUrl: rendered.dataUrl
         });
 
@@ -363,7 +479,7 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
         page: 1,
         totalPages: 1,
         status: 'ocr',
-        message: `Ejecutando OCR (${model}) en la imagen...`,
+        message: `Escaneando certificado médico con (${model})...`,
         previewUrl: dataUrl
       });
 
@@ -391,23 +507,25 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
 
       sendEvent('page_result', pageResult);
     } else {
-      sendEvent('error', { message: 'Formato de archivo no soportado. Sube un archivo PDF o imagen.' });
+      sendEvent('error', { message: 'Formato de archivo no soportado. Sube un PDF o imagen médica.' });
       return;
     }
 
-    // 🧠 Paso de Resumen y Descripción Inteligente protegido
+    // 🩺 Generación de Auditoría y Resumen con JSON estructurado
     let summary = '';
+    let jsonData = getDefaultDisabilitySchema();
     if (autoSummary && fullText.trim()) {
       sendEvent('progress', {
         page: totalPages,
         totalPages,
         status: 'summarizing',
-        message: `Generando descripción y resumen inteligente...`
+        message: `Auditando incapacidad y extrayendo datos con '${summaryModel}'...`
       });
 
       try {
         const summaryRes = await generateDocumentSummary(fullText, summaryModel);
         summary = summaryRes.summary;
+        jsonData = summaryRes.jsonData || getDefaultDisabilitySchema();
 
         if (summaryRes.metrics) {
           totalPromptTokens += summaryRes.metrics.promptTokens;
@@ -415,7 +533,7 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
           totalEvalDurationNs += summaryRes.metrics.evalDurationNs;
         }
 
-        sendEvent('summary', { summary, metrics: summaryRes.metrics });
+        sendEvent('summary', { summary, jsonData, metrics: summaryRes.metrics });
       } catch (err) {
         console.error('Error no fatal en resumen:', err);
       }
@@ -436,12 +554,12 @@ app.post('/api/ocr-stream', upload.single('file'), async (req, res) => {
       pagesProcessed: totalPages
     };
 
-    // Garantizar que SIEMPRE se emite complete
     sendEvent('complete', {
       totalPages,
       results,
       fullText,
       summary,
+      jsonData,
       metrics: globalMetrics
     });
 
@@ -458,7 +576,7 @@ app.post('/api/ocr', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No se subió ningún archivo' });
 
   const model = req.body.model || 'deepseek-ocr:latest';
-  const summaryModel = req.body.summaryModel || model;
+  const summaryModel = req.body.summaryModel || 'gemma4:e4b';
   const format = req.body.format || 'markdown';
   const customPrompt = req.body.customPrompt || '';
   const scale = parseFloat(req.body.scale) || 2.0;
@@ -510,9 +628,11 @@ app.post('/api/ocr', upload.single('file'), async (req, res) => {
     }
 
     let summary = '';
+    let jsonData = getDefaultDisabilitySchema();
     if (autoSummary && fullText.trim()) {
       const summaryRes = await generateDocumentSummary(fullText, summaryModel);
       summary = summaryRes.summary;
+      jsonData = summaryRes.jsonData || getDefaultDisabilitySchema();
       if (summaryRes.metrics) {
         totalPromptTokens += summaryRes.metrics.promptTokens;
         totalEvalTokens += summaryRes.metrics.evalTokens;
@@ -531,6 +651,7 @@ app.post('/api/ocr', upload.single('file'), async (req, res) => {
       pages,
       fullText,
       summary,
+      jsonData,
       metrics: {
         promptTokens: totalPromptTokens,
         evalTokens: totalEvalTokens,
@@ -546,8 +667,9 @@ app.post('/api/ocr', upload.single('file'), async (req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`=========================================`);
-  console.log(` Servidor OCR iniciado en: http://localhost:${PORT}`);
+  console.log(`=======================================================`);
+  console.log(` Escáner de Incapacidades Médicas con IA Local`);
+  console.log(` Servidor web iniciado en: http://localhost:${PORT}`);
   console.log(` Conectado a Ollama en: ${OLLAMA_HOST}`);
-  console.log(`=========================================`);
+  console.log(`=======================================================`);
 });

@@ -1,7 +1,7 @@
-﻿{
-  "name": "pdf-deepseek-ocr",
+{
+  "name": "escaner-incapacidades-ia",
   "version": "1.0.0",
-  "description": "Web app para extraer texto de PDFs usando DeepSeek OCR en Ollama",
+  "description": "Aplicación web para escaneo, lectura OCR y análisis inteligente de certificados de incapacidad médica usando IA local en Ollama",
   "type": "module",
   "main": "server.js",
   "scripts": {

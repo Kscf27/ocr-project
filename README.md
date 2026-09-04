@@ -1,29 +1,32 @@
-# 📄 DeepSeek OCR Studio
+# 🏥 Escáner de Incapacidades Médicas con IA Local
 
-Aplicación web local de alto rendimiento para el **reconocimiento óptico de caracteres (OCR)**, extracción de texto estructurado y **análisis/resumen inteligente de documentos** (PDFs e imágenes) impulsado por **Ollama** y el modelo **DeepSeek OCR**.
+Aplicación web local de alto rendimiento diseñada específicamente para el **escaneo, lectura OCR y auditoría inteligente de certificados de incapacidad médica** (en formato PDF o imágenes), procesada 100% en tu entorno local mediante **Ollama** y modelos de visión e inferencia de texto (como **DeepSeek OCR** y **Gemma / Llama**).
+
+> [!NOTE]
+> **Privacidad y Seguridad Médica:** Al ejecutarse completamente en local con Ollama, ningún dato clínico o sensible de los pacientes o trabajadores es transmitido a servicios externos en la nube.
 
 ---
 
 ## 🌟 Características Principales
 
-- 📑 **Procesamiento de PDFs Multi-Página:** Carga de documentos de hasta 100 MB. Cada página se rasteriza a alta resolución en el servidor mediante `@napi-rs/canvas` y `pdfjs-dist`.
-- 🖼️ **Soporte para Imágenes:** Procesamiento directo de archivos individuales (`.png`, `.jpg`, `.jpeg`, `.webp`).
-- ⚡ **Progreso en Tiempo Real con SSE (Server-Sent Events):** Visualización en vivo del estado de renderizado, escaneo página por página y previsualización de miniaturas.
-- 🧠 **Descripción y Resumen Inteligente con IA:** Análisis automático del documento tras el OCR:
-  - Identificación del tipo de documento (facturas, contratos, recibos, reportes técnicos, etc.).
-  - Resumen ejecutivo conciso.
-  - Extracción de datos clave (fechas, montos monetarios, nombres de empresas/personas y decisiones).
-- 🎛️ **Formatos de Extracción Configurables:**
-  - **Markdown enriquecido:** Conserva títulos, listas, tablas y bloques de texto.
-  - **Texto plano:** Extracción limpia sin etiquetas ni marcado.
-  - **Tablas y formularios:** Optimizado para la captura estructurada de datos tabulares.
-  - **Prompt personalizado:** Posibilidad de enviar instrucciones a medida al modelo de IA.
-- 💻 **Interfaz Web Moderna e Interactiva:**
-  - **Vista Formateada:** Renderizado HTML estilizado con soporte Markdown.
-  - **Vista en Bruto (Raw):** Editor de texto plano editable con contador de caracteres.
-  - **Vista por Páginas:** Navegación individual por página con miniatura de la imagen procesada.
-  - **Búsqueda en Vivo:** Filtrado y resaltado de palabras clave en el texto extraído.
-- 💾 **Exportación Inmediata:** Copia directa al portapapeles o descarga en archivos `.md` y `.txt`.
+- 📑 **Escaneo de Incapacidades en PDF e Imágenes:** Soporte para certificados multi-página en PDF y formatos gráficos escaneados o fotografías (`.png`, `.jpg`, `.jpeg`, `.webp`) hasta 100 MB.
+- 🩺 **Auditoría Clínica y Laboral Automatizada con IA:** Extracción estructurada de los datos más críticos del certificado de incapacidad:
+  - **Identificación del Paciente/Trabajador:** Nombres y número de identificación / cédula.
+  - **Entidad de Salud:** EPS, IPS, clínica u hospital emisor.
+  - **Médico Tratante:** Nombre, especialidad y registro médico.
+  - **Período de Incapacidad:** Fecha de inicio, fecha de terminación y días totales otorgados.
+  - **Tipo de Contingencia:** Origen de la incapacidad (Enfermedad general, Accidente de trabajo, Enfermedad laboral, Maternidad/Paternidad, Accidente de tránsito).
+  - **Diagnóstico y CIE-10:** Código(s) de diagnóstico y descripción de la condición de salud.
+  - **Tipo de Trámite:** Validación si es incapacidad inicial o prórroga.
+  - **Recomendaciones y Restricciones:** Cuidados laborales y controles médicos.
+- ⚡ **Progreso en Tiempo Real con SSE (Server-Sent Events):** Visualización en vivo del renderizado, escaneo página por página y previsualización de cada página procesada.
+- 📊 **Métricas de Rendimiento en Tiempo Real:** Monitor de tokens consumidos, velocidad (tokens/segundo) y tiempo de procesamiento.
+- 🎛️ **Formatos de Lectura OCR:**
+  - **Markdown:** Conserva formato estructurado, encabezados y listas.
+  - **Texto plano:** Extracción directa sin etiquetas.
+  - **Tablas:** Diseñado para formularios y formatos tabulados del sector salud.
+  - **Instrucción personalizada:** Permite ajustar el prompt enviado al modelo de visión.
+- 💾 **Exportación Inmediata:** Copia rápida de datos de auditoría al portapapeles y descarga de informes en `.md` y `.txt`.
 
 ---
 
@@ -34,7 +37,7 @@ Aplicación web local de alto rendimiento para el **reconocimiento óptico de ca
 - **Motor de Inferencia IA:** [Ollama](https://ollama.com/) (API local en `http://127.0.0.1:11434`).
 - **Modelos Recomendados:**
   - **OCR / Visión:** `deepseek-ocr:latest`
-  - **Resumen y Análisis:** `mistral`, `llama3`, `qwen2.5`, `deepseek-r1`, etc.
+  - **Auditoría y Resumen Clínico:** `gemma4:e4b`, `llama3.2`, `mistral`, `qwen2.5`, etc.
 - **Frontend:** HTML5, [Tailwind CSS](https://tailwindcss.com/), [Marked.js](https://marked.js.org/), [DOMPurify](https://github.com/cure53/DOMPurify) y [Lucide Icons](https://lucide.dev/).
 
 ---
@@ -42,12 +45,12 @@ Aplicación web local de alto rendimiento para el **reconocimiento óptico de ca
 ## 📋 Requisitos Previos
 
 1. **Node.js** v18 o superior instalado en el sistema ([Descargar Node.js](https://nodejs.org/)).
-2. **Ollama** instalado y ejecutándose ([Descargar Ollama](https://ollama.com/)).
-3. Descargar el modelo de OCR en Ollama:
+2. **Ollama** instalado y en ejecución ([Descargar Ollama](https://ollama.com/)).
+3. Descargar el modelo de visión / OCR en Ollama:
    ```bash
    ollama run deepseek-ocr:latest
    ```
-   *(Opcional: puedes tener modelos de texto adicionales como `llama3.2` o `mistral` para el resumen automático).*
+   *(Opcional: puedes contar con modelos de lenguaje como `gemma4:e4b`, `llama3.2` o `mistral` para la auditoría y extracción clínica).*
 
 ---
 
@@ -62,14 +65,14 @@ npm install
 
 #### Opción A: Inicio rápido en Windows (Recomendado)
 Haz doble clic sobre el archivo **`iniciar.bat`**. 
-Este script verificará Node.js, iniciará el servidor Express y abrirá automáticamente tu navegador en `http://localhost:3000`.
+El script validará Node.js, iniciará el servidor Express y abrirá tu navegador en `http://localhost:3000`.
 
 #### Opción B: Mediante terminal
 ```bash
 # Modo producción
 npm start
 
-# O modo desarrollo con recarga en caliente (watch mode)
+# Modo desarrollo con recarga automática
 npm run dev
 ```
 
@@ -77,25 +80,16 @@ Abre tu navegador en: [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## ⚙️ Variables de Entorno y Configuración
-
-El servidor puede configurarse mediante variables de entorno estándar:
+## ⚙️ Variables de Entorno
 
 | Variable | Descripción | Valor por defecto |
 | :--- | :--- | :--- |
 | `PORT` | Puerto donde escucha el servidor web | `3000` |
 | `OLLAMA_HOST` | URL base de la instancia de Ollama | `http://127.0.0.1:11434` |
 
-*Ejemplo de ejecución con puerto y host personalizado:*
-```bash
-PORT=8080 OLLAMA_HOST=http://192.168.1.50:11434 npm start
-```
-
 ---
 
 ## 📡 API Endpoints
-
-La aplicación expone los siguientes endpoints REST para integraciones o consumo externo:
 
 ### 1. Comprobar Estado y Modelos Disponibles
 - **Ruta:** `GET /api/status`
@@ -104,40 +98,26 @@ La aplicación expone los siguientes endpoints REST para integraciones o consumo
   {
     "connected": true,
     "ollamaHost": "http://127.0.0.1:11434",
-    "models": ["deepseek-ocr:latest", "llama3.2:latest"],
+    "visionModels": ["deepseek-ocr:latest"],
+    "summaryModels": ["deepseek-ocr:latest", "gemma4:e4b"],
     "defaultOcrModel": "deepseek-ocr:latest",
-    "defaultSummaryModel": "llama3.2:latest"
+    "defaultSummaryModel": "gemma4:e4b"
   }
   ```
 
-### 2. OCR en Tiempo Real (Server-Sent Events)
+### 2. Escaneo de Incapacidad en Tiempo Real (Server-Sent Events)
 - **Ruta:** `POST /api/ocr-stream`
 - **Content-Type:** `multipart/form-data`
 - **Parámetros (`FormData`):**
-  - `file`: Archivo PDF o imagen (hasta 100 MB).
-  - `model`: Nombre del modelo OCR (ej. `deepseek-ocr:latest`).
-  - `summaryModel`: Nombre del modelo para el resumen (opcional).
-  - `format`: Formato de salida (`markdown`, `text`, `table`).
-  - `customPrompt`: Instrucción personalizada opcional.
+  - `file`: Archivo PDF o imagen de la incapacidad.
+  - `model`: Modelo de visión OCR (ej. `deepseek-ocr:latest`).
+  - `summaryModel`: Modelo para la auditoría clínica (ej. `gemma4:e4b`).
+  - `format`: Formato de lectura (`markdown`, `text`, `table`).
   - `autoSummary`: `"true"` o `"false"`.
-  - `scale`: Escala de resolución para renderizar PDF (ej. `2.0`).
 
-### 3. OCR Estándar (JSON Sync)
+### 3. Escaneo Estándar (JSON Sync)
 - **Ruta:** `POST /api/ocr`
 - **Content-Type:** `multipart/form-data`
-- **Respuesta:**
-  ```json
-  {
-    "success": true,
-    "filename": "documento.pdf",
-    "totalPages": 3,
-    "pages": [
-      { "pageNumber": 1, "text": "..." }
-    ],
-    "fullText": "...",
-    "summary": "### 📌 Tipo y Descripción..."
-  }
-  ```
 
 ---
 
@@ -146,12 +126,12 @@ La aplicación expone los siguientes endpoints REST para integraciones o consumo
 ```text
 ocr/
 ├── public/
-│   ├── index.html       # Interfaz gráfica de usuario
-│   ├── app.js           # Lógica del cliente, SSE, renderizado y descarga
+│   ├── index.html       # Interfaz gráfica adaptada para escaneo de incapacidades
+│   ├── app.js           # Lógica frontend, cliente SSE y exportación
 │   └── style.css        # Estilos personalizados y utilidades de interfaz
-├── iniciar.bat          # Lanzador automático de un clic para Windows
-├── package.json         # Configuración y dependencias de Node.js
-├── server.js            # Servidor Express, renderizado PDF y conexión a Ollama
+├── iniciar.bat          # Script de inicio rápido en Windows
+├── package.json         # Configuración y dependencias del proyecto
+├── server.js            # Servidor Express, renderizado y conexión a Ollama
 └── README.md            # Documentación del proyecto
 ```
 

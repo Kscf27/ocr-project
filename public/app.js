@@ -1,4 +1,4 @@
-﻿function refreshIcons() {
+function refreshIcons() {
   if (window.lucide) lucide.createIcons();
 }
 
@@ -6,6 +6,7 @@ let selectedFile = null;
 let currentResults = [];
 let fullTextResult = '';
 let currentSummary = '';
+let currentJsonData = null;
 
 // DOM Elements
 const dropZone = document.getElementById('dropZone');
@@ -47,6 +48,13 @@ const summaryCard = document.getElementById('summaryCard');
 const summaryContent = document.getElementById('summaryContent');
 const copySummaryBtn = document.getElementById('copySummaryBtn');
 
+const disabilityJsonCard = document.getElementById('disabilityJsonCard');
+const jsonContent = document.getElementById('jsonContent');
+const copyJsonBtn = document.getElementById('copyJsonBtn');
+const copyJsonBtnText = document.getElementById('copyJsonBtnText');
+const downloadJsonBtn = document.getElementById('downloadJsonBtn');
+const downloadJsonBtnTop = document.getElementById('downloadJsonBtnTop');
+
 const formattedContent = document.getElementById('formattedContent');
 const rawTextarea = document.getElementById('rawTextarea');
 const pagesViewContainer = document.getElementById('pagesViewContainer');
@@ -61,7 +69,6 @@ const downloadMdBtn = document.getElementById('downloadMdBtn');
 const downloadTxtBtn = document.getElementById('downloadTxtBtn');
 const searchInput = document.getElementById('searchInput');
 
-// Ocultar/mostrar selector de modelo de resumen según checkbox
 if (autoSummaryCheck && summaryModelWrapper) {
   autoSummaryCheck.addEventListener('change', () => {
     if (autoSummaryCheck.checked) {
@@ -78,31 +85,39 @@ async function checkOllamaStatus() {
     const data = await res.json();
     if (data.connected) {
       statusDot.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400';
-      statusText.textContent = `Ollama Conectado (${data.models.length} modelos)`;
+      statusText.textContent = `Ollama Conectado (${data.summaryModels?.length || 0} modelos)`;
       statusText.className = 'text-emerald-300 font-medium';
 
+      // 1. Selector Modelo OCR (Solo modelos de Visión/OCR)
       modelSelect.innerHTML = '';
-      summaryModelSelect.innerHTML = '<option value="">Mismo modelo OCR (Recomendado, rápido)</option>';
-
-      data.models.forEach(model => {
-        // Selector OCR
+      const visionList = data.visionModels || ['deepseek-ocr:latest'];
+      visionList.forEach(model => {
         const opt = document.createElement('option');
         opt.value = model;
         opt.textContent = model;
         if (model.includes('deepseek-ocr')) {
           opt.selected = true;
-          opt.textContent += ' (DeepSeek OCR)';
-        } else if (model.includes('ocr')) {
-          opt.textContent += ' (OCR)';
+          opt.textContent += ' (Recomendado)';
         }
         modelSelect.appendChild(opt);
-
-        // Selector Resumen
-        const optSummary = document.createElement('option');
-        optSummary.value = model;
-        optSummary.textContent = model;
-        summaryModelSelect.appendChild(optSummary);
       });
+
+      // 2. Selector Modelo Resumen (Modelos LLM)
+      summaryModelSelect.innerHTML = '';
+      const summaryList = data.summaryModels || visionList;
+      summaryList.forEach(model => {
+        const opt = document.createElement('option');
+        opt.value = model;
+        opt.textContent = model;
+        if (model.includes('gemma4:e4b')) {
+          opt.selected = true;
+          opt.textContent += ' (IA Recomendada)';
+        } else if (model.includes('deepseek-ocr')) {
+          opt.textContent += ' (Rápido OCR)';
+        }
+        summaryModelSelect.appendChild(opt);
+      });
+
     } else {
       statusDot.className = 'w-2.5 h-2.5 rounded-full bg-rose-500';
       statusText.textContent = 'Ollama desconectado';
@@ -143,6 +158,8 @@ function clearFile() {
   dropZonePrompt.classList.remove('hidden');
   startOcrBtn.disabled = true;
   metricsSection.classList.add('hidden');
+  if (disabilityJsonCard) disabilityJsonCard.classList.add('hidden');
+  currentJsonData = null;
   refreshIcons();
 }
 
@@ -204,19 +221,21 @@ startOcrBtn.addEventListener('click', async () => {
   metricsSection.classList.add('hidden');
   resultsSection.classList.add('hidden');
   summaryCard.classList.add('hidden');
+  if (disabilityJsonCard) disabilityJsonCard.classList.add('hidden');
   progressBarFill.style.width = '0%';
   progressPercentage.textContent = '0%';
-  progressStageTitle.textContent = 'Iniciando escaneo...';
-  progressStatusText.textContent = 'Preparando documento...';
+  progressStageTitle.textContent = 'Iniciando escaneo de incapacidad...';
+  progressStatusText.textContent = 'Preparando certificado médico...';
 
   currentResults = [];
   fullTextResult = '';
   currentSummary = '';
+  currentJsonData = null;
   pagesViewContainer.innerHTML = '';
 
-  const format = document.querySelector('input[name="ocrFormat"]:checked')?.value || 'markdown';
+  const format = 'markdown';
   const model = modelSelect.value || 'deepseek-ocr:latest';
-  const summaryModel = summaryModelSelect.value || model;
+  const summaryModel = summaryModelSelect.value || 'gemma4:e4b';
   const autoSummary = autoSummaryCheck.checked;
 
   const formData = new FormData();
@@ -269,39 +288,54 @@ startOcrBtn.addEventListener('click', async () => {
 
 function handleSseEvent(eventType, data) {
   if (eventType === 'init') {
-    progressStageTitle.textContent = `Documento: ${data.filename}`;
+    progressStageTitle.textContent = `Incapacidad: ${data.filename}`;
     tabPagesCount.textContent = data.totalPages;
   } else if (eventType === 'progress') {
     if (data.status === 'summarizing') {
       progressBarFill.style.width = '95%';
       progressPercentage.textContent = '95%';
-      progressStageTitle.textContent = '🧠 Analizando Documento con IA';
+      progressStageTitle.textContent = '🩺 Auditando Incapacidad Médica con IA';
       progressStatusText.textContent = data.message;
     } else {
-      const pct = Math.round(((data.page - 0.5) / data.totalPages) * 90);
+      const pct = Math.round(((data.page - 0.5) / data.totalPages) * 85);
       progressBarFill.style.width = `${pct}%`;
       progressPercentage.textContent = `${pct}%`;
-      progressStageTitle.textContent = `Página ${data.page} de ${data.totalPages}`;
+      progressStageTitle.textContent = `Escaneando página ${data.page} de ${data.totalPages}`;
       progressStatusText.textContent = data.message;
     }
   } else if (eventType === 'page_result') {
     currentResults.push(data);
     addPageCardToView(data);
+    if (tabPagesCount) tabPagesCount.textContent = currentResults.length;
+
+    // Actualizar texto inmediatamente para que las pestañas Markdown y Texto Crudo muestren datos en vivo
+    fullTextResult = currentResults.map(r => (currentResults.length > 1 ? `--- Página ${r.pageNumber} ---\n\n` : '') + r.text).join('\n\n');
+    displayResults(fullTextResult, false);
+    resultsSection.classList.remove('hidden');
+    refreshIcons();
   } else if (eventType === 'summary') {
     currentSummary = data.summary;
     renderSummary(data.summary);
+    if (data.jsonData) {
+      renderDisabilityJson(data.jsonData);
+    }
+    resultsSection.classList.remove('hidden');
   } else if (eventType === 'complete') {
     progressBarFill.style.width = '100%';
     progressPercentage.textContent = '100%';
-    progressStageTitle.textContent = '¡Escaneo y análisis completados!';
+    progressStageTitle.textContent = '¡Incapacidad escaneada y analizada con éxito!';
     progressStatusText.textContent = `Procesadas ${data.totalPages} página(s)`;
 
-    fullTextResult = data.fullText;
-    displayResults(data.fullText);
+    fullTextResult = data.fullText || fullTextResult;
+    displayResults(fullTextResult, false);
 
     if (data.summary) {
       currentSummary = data.summary;
       renderSummary(data.summary);
+    }
+
+    if (data.jsonData) {
+      renderDisabilityJson(data.jsonData);
     }
 
     if (data.metrics) {
@@ -318,7 +352,7 @@ function handleSseEvent(eventType, data) {
   }
 }
 
-// Renderizar métricas de rendimiento y tokens
+// Renderizar métricas
 function renderMetrics(metrics, totalPages) {
   metricTotalTokens.textContent = Number(metrics.totalTokens || 0).toLocaleString();
   metricPromptTokens.textContent = Number(metrics.promptTokens || 0).toLocaleString();
@@ -347,14 +381,33 @@ function renderSummary(summaryMd) {
   refreshIcons();
 }
 
-function displayResults(text) {
+function renderDisabilityJson(jsonData) {
+  if (!jsonData) return;
+  currentJsonData = jsonData;
+  if (jsonContent) {
+    jsonContent.textContent = JSON.stringify(jsonData, null, 2);
+  }
+  if (disabilityJsonCard) {
+    disabilityJsonCard.classList.remove('hidden');
+  }
+  refreshIcons();
+}
+
+function displayResults(text, switchTab = true) {
+  if (!text || !text.trim()) {
+    formattedContent.innerHTML = '<p class="text-slate-400 italic">No se detectó texto en el documento.</p>';
+    rawTextarea.value = '';
+    return;
+  }
   if (window.marked && window.DOMPurify) {
     formattedContent.innerHTML = DOMPurify.sanitize(marked.parse(text));
   } else {
     formattedContent.innerText = text;
   }
   rawTextarea.value = text;
-  setActiveTab('formatted');
+  if (switchTab) {
+    setActiveTab('formatted');
+  }
 }
 
 function addPageCardToView(pageData) {
@@ -388,31 +441,92 @@ copySummaryBtn.addEventListener('click', () => {
   if (!currentSummary) return;
   navigator.clipboard.writeText(currentSummary).then(() => {
     copySummaryBtn.querySelector('span').textContent = '¡Copiado!';
-    setTimeout(() => { copySummaryBtn.querySelector('span').textContent = 'Copiar Análisis'; }, 2000);
+    setTimeout(() => { copySummaryBtn.querySelector('span').textContent = 'Copiar Datos Extraídos'; }, 2000);
   });
 });
 
 copyBtn.addEventListener('click', () => {
   if (!fullTextResult) return;
-  const contentToCopy = currentSummary ? `# ANÁLISIS DEL DOCUMENTO\n\n${currentSummary}\n\n---\n\n# TEXTO COMPLETO EXTRAÍDO\n\n${fullTextResult}` : fullTextResult;
+  const contentToCopy = currentSummary ? `# AUDITORÍA DE INCAPACIDAD MÉDICA\n\n${currentSummary}\n\n---\n\n# TEXTO EXTRAÍDO DEL CERTIFICADO\n\n${fullTextResult}` : fullTextResult;
   navigator.clipboard.writeText(contentToCopy).then(() => {
     copyBtnText.textContent = '¡Copiado!';
     setTimeout(() => { copyBtnText.textContent = 'Copiar Todo'; }, 2000);
   });
 });
 
+function getDownloadBaseName() {
+  let docNumber = '';
+
+  // 1. Intentar desde los datos estructurados JSON
+  if (currentJsonData && currentJsonData.identificacion) {
+    const rawId = String(currentJsonData.identificacion).trim();
+    const numbersOnly = rawId.replace(/[^0-9]/g, '');
+    if (numbersOnly.length >= 4) {
+      docNumber = numbersOnly;
+    } else {
+      docNumber = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
+    }
+  }
+
+  // 2. Si aún no hay, buscar en el texto extraído
+  if (!docNumber && fullTextResult) {
+    const match = fullTextResult.match(/(?:c\.?c\.?|documento|identificaci[oó]n|c[eé]dula|c\.?e\.?|ti|t\.?i\.?)[:\s#.]*([0-9]{5,12})/i);
+    if (match && match[1]) {
+      docNumber = match[1];
+    }
+  }
+
+  const docPrefix = docNumber ? docNumber : 'sindocumento';
+
+  // Fecha actual en formato YYYY-MM-DD
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+
+  return `${docPrefix}_${dateStr}`;
+}
+
 downloadMdBtn.addEventListener('click', () => {
   if (!fullTextResult) return;
-  const filename = (selectedFile?.name?.replace(/\.[^/.]+$/, "") || 'ocr_resultado') + '.md';
-  const fullDocument = currentSummary ? `# Análisis del Documento\n\n${currentSummary}\n\n---\n\n# Texto Extraído por OCR\n\n${fullTextResult}` : fullTextResult;
+  const filename = `${getDownloadBaseName()}.md`;
+  const fullDocument = currentSummary ? `# Auditoría de Incapacidad Médica\n\n${currentSummary}\n\n---\n\n# Texto Extraído de la Incapacidad\n\n${fullTextResult}` : fullTextResult;
   downloadBlob(fullDocument, filename, 'text/markdown');
 });
 
 downloadTxtBtn.addEventListener('click', () => {
   if (!fullTextResult) return;
-  const filename = (selectedFile?.name?.replace(/\.[^/.]+$/, "") || 'ocr_resultado') + '.txt';
+  const filename = `${getDownloadBaseName()}.txt`;
   downloadBlob(fullTextResult, filename, 'text/plain');
 });
+
+function triggerJsonDownload() {
+  if (!currentJsonData) return;
+  const filename = `${getDownloadBaseName()}.json`;
+  downloadBlob(JSON.stringify(currentJsonData, null, 2), filename, 'application/json');
+}
+
+if (copyJsonBtn) {
+  copyJsonBtn.addEventListener('click', () => {
+    if (!currentJsonData) return;
+    const jsonStr = JSON.stringify(currentJsonData, null, 2);
+    navigator.clipboard.writeText(jsonStr).then(() => {
+      if (copyJsonBtnText) copyJsonBtnText.textContent = '¡Copiado!';
+      setTimeout(() => {
+        if (copyJsonBtnText) copyJsonBtnText.textContent = 'Copiar JSON';
+      }, 2000);
+    });
+  });
+}
+
+if (downloadJsonBtn) {
+  downloadJsonBtn.addEventListener('click', triggerJsonDownload);
+}
+
+if (downloadJsonBtnTop) {
+  downloadJsonBtnTop.addEventListener('click', triggerJsonDownload);
+}
 
 function downloadBlob(content, filename, type) {
   const blob = new Blob([content], { type: `${type};charset=utf-8` });

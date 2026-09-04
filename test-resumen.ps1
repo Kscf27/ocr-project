@@ -1,6 +1,6 @@
-﻿$body = @{
+$body = @{
     model = "deepseek-ocr:latest"
-    prompt = "Resume en 2 lineas este texto: Factura de prueba por $100"
+    prompt = "Analiza brevemente esta incapacidad medica: Paciente Juan Perez, 3 dias de incapacidad por lumbalgia CIE-10 M54.5 emitida por Sanitas EPS."
     stream = $false
 } | ConvertTo-Json
 
